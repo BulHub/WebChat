@@ -56,36 +56,41 @@
         <tbody>
         <tr>
             <th scope="row">1</th>
+            <td>Id</td>
+            <td>${id}</td>
+        </tr>
+        <tr>
+            <th scope="row">2</th>
             <td>Name</td>
             <td>${name}</td>
         </tr>
         <tr>
-            <th scope="row">2</th>
+            <th scope="row">3</th>
             <td>Surname</td>
             <td>${surname}</td>
         </tr>
         <tr>
-            <th scope="row">3</th>
+            <th scope="row">4</th>
             <td>Patronymic</td>
             <td>${patronymic}</td>
         </tr>
         <tr>
-            <th scope="row">4</th>
+            <th scope="row">5</th>
             <td>Phone</td>
             <td>${phone}</td>
         </tr>
         <tr>
-            <th scope="row">5</th>
+            <th scope="row">6</th>
             <td>DateOfBirth</td>
             <td>${dateOfBirth}</td>
         </tr>
         <tr>
-            <th scope="row">6</th>
+            <th scope="row">7</th>
             <td>Gender</td>
             <td>${gender}</td>
         </tr>
         <tr>
-            <th scope="row">7</th>
+            <th scope="row">8</th>
             <td>Country</td>
             <td>${country}</td>
         </tr>

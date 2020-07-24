@@ -1,11 +1,9 @@
 package ru.bulat.data;
 
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
+import ru.bulat.model.*;
 
 import java.sql.*;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 public class DatabaseConnection {
 
@@ -15,7 +13,7 @@ public class DatabaseConnection {
     private DatabaseConnection() throws SQLException {
         try {
             Class.forName("org.postgresql.Driver");
-            String url = "jdbc:postgresql://localhost:5433/postgres";
+            String url = "jdbc:postgresql://localhost:5433/web_chat";
             String password = "543216789";
             String username = "postgres";
             this.connection = DriverManager.getConnection(url, username, password);
@@ -24,11 +22,11 @@ public class DatabaseConnection {
         }
     }
 
-    public Connection getConnection() {
+    private Connection getConnection() {
         return connection;
     }
 
-    public static DatabaseConnection getInstance() throws SQLException {
+    private static DatabaseConnection getInstance() throws SQLException {
         if (instance == null) {
             instance = new DatabaseConnection();
         } else if (instance.getConnection().isClosed()) {
@@ -38,237 +36,163 @@ public class DatabaseConnection {
         return instance;
     }
 
-    public static int writeToDatabaseNewUser(String nickname, String email, String password) {
-        try (PreparedStatement preparedStatement = getInstance().getConnection().prepareStatement("INSERT INTO users(nickname, email, password, position) VALUES (? , ?, ?, ?) RETURNING id")) {
-            preparedStatement.setString(1, nickname);
-            preparedStatement.setString(2, email);
-            preparedStatement.setString(3, password);
-            preparedStatement.setString(4, "Client");
-            preparedStatement.execute();
-            ResultSet lastUpdatedId = preparedStatement.getResultSet();
-            if (lastUpdatedId.next()) {
-                return lastUpdatedId.getInt(1);
-            }
+    public static User save(User user) {
+        try (PreparedStatement preparedStatement = getInstance().getConnection().prepareStatement("INSERT INTO users(nickname, email, password) VALUES (? , ?, ?) RETURNING id")) {
+            settingTheValueForTheRequest(preparedStatement, Arrays.asList(user.getNickname(), user.getEmail(), user.getPassword()));
+            user.setId(receivingId(preparedStatement));
         } catch (SQLException e) {
             System.err.format("SQL State: %s\n%s", e.getSQLState(), e.getMessage());
         }
-        return -1;
+        return user;
     }
 
-    public static int userVerification(String email, String password) {
-        try (PreparedStatement preparedStatement = getInstance().getConnection().prepareStatement("SELECT id, password, nickname FROM users where email = ?")) {
+    public static Optional<User> findByEmail(String email) {
+        try (PreparedStatement preparedStatement = getInstance().getConnection().prepareStatement("SELECT id, nickname, email, password, information_id FROM users where email = ?")) {
             preparedStatement.setString(1, email.trim().toLowerCase());
             ResultSet resultSet = preparedStatement.executeQuery();
-            PasswordEncoder encoder = new BCryptPasswordEncoder();
             while (resultSet.next()) {
-                String normalPassword = resultSet.getString("password");
-                String nickname = resultSet.getString("nickname");
-                int id = resultSet.getInt("id");
-                if (encoder.matches(password, normalPassword)) {
-                    return id;
-                }
+                return Optional.ofNullable(User.builder()
+                        .id(resultSet.getLong("id"))
+                        .nickname(resultSet.getString("nickname"))
+                        .email(resultSet.getString("email"))
+                        .password(resultSet.getString("password"))
+                        .information_id(resultSet.getLong("information_id"))
+                        .build());
             }
         } catch (SQLException e) {
             System.err.format("SQL State: %s\n%s", e.getSQLState(), e.getMessage());
         }
-        return -1;
+        return Optional.empty();
     }
 
-    public static void changePassword(String email, String newPassword, String oldPassword) {
-        try (PreparedStatement preparedStatement = getInstance().getConnection().prepareStatement("UPDATE users SET password = ? WHERE email = ? and password = ?")) {
+    public static void updatePassword(String email, String newPassword) {
+        try (PreparedStatement preparedStatement = getInstance().getConnection().prepareStatement("UPDATE users SET password = ? WHERE email = ?")) {
             preparedStatement.setString(1, newPassword);
             preparedStatement.setString(2, email);
-            preparedStatement.setString(3, oldPassword);
             preparedStatement.executeUpdate();
         } catch (SQLException e) {
             System.err.format("SQL State: %s\n%s", e.getSQLState(), e.getMessage());
         }
     }
 
-    public static int recordingAdditionalUserData(String name, String surname, String patronymic, String phone, String dateOfBirth,
-                                                  String gender, String country, String about_myself) {
+    public static Information save(Information information) {
         try (PreparedStatement preparedStatement = getInstance().getConnection().prepareStatement
-                ("INSERT INTO informationaboutuser(name, surname, patronymic, phone, dateofbirth, gender, country, aboutmyself) values(?, ?, ?, ?, ?, ?, ?, ?) RETURNING id")) {
-            preparedStatement.setString(1, name);
-            preparedStatement.setString(2, surname);
-            preparedStatement.setString(3, patronymic);
-            preparedStatement.setString(4, phone);
-            preparedStatement.setString(5, dateOfBirth);
-            preparedStatement.setString(6, gender);
-            preparedStatement.setString(7, country);
-            preparedStatement.setString(8, about_myself);
+                ("INSERT INTO information(name, surname, patronymic, phone, dateofbirth, gender, country, aboutmyself) values(?, ?, ?, ?, ?, ?, ?, ?) RETURNING id")) {
+            settingTheValueForTheRequest(preparedStatement, Arrays.asList(information.getName(), information.getSurname(),
+                    information.getPatronymic(), information.getPhone(), information.getDateOfBirth(), information.getGender(),
+                    information.getCountry(), information.getAboutMySelf()));
+            information.setId(receivingId(preparedStatement));
+        } catch (SQLException e) {
+            System.err.format("SQL State: %s\n%s", e.getSQLState(), e.getMessage());
+        }
+        return information;
+    }
+
+    public static Feedback save(Feedback feedback) {
+        try (PreparedStatement preparedStatement = getInstance().getConnection().prepareStatement("INSERT INTO feedback(name, email, message) values(?, ?, ?) RETURNING id")) {
+            settingTheValueForTheRequest(preparedStatement, Arrays.asList(feedback.getName(), feedback.getEmail(), feedback.getMessage()));
+            feedback.setId(receivingId(preparedStatement));
+        } catch (SQLException e) {
+            System.err.format("SQL State: %s\n%s", e.getSQLState(), e.getMessage());
+        }
+        return feedback;
+    }
+
+    public static User_Feedback save(User_Feedback user_feedback) {
+        try (PreparedStatement preparedStatement = getInstance().getConnection().prepareStatement("INSERT INTO feedback_user(user_id, feedback_id) VALUES (?, ?)")) {
+            preparedStatement.setLong(1, user_feedback.getUser_id());
+            preparedStatement.setLong(2, user_feedback.getFeedback_id());
             preparedStatement.execute();
-            ResultSet lastUpdatedId = preparedStatement.getResultSet();
-            if (lastUpdatedId.next()) {
-                return lastUpdatedId.getInt(1);
-            }
         } catch (SQLException e) {
             System.err.format("SQL State: %s\n%s", e.getSQLState(), e.getMessage());
         }
-        return -1;
+        return user_feedback;
     }
 
-    public static int recordNewFeedback(String name, String email, String message) {
-        try (PreparedStatement preparedStatement = getInstance().getConnection().prepareStatement("INSERT INTO feedback(name, email, message) values(?, ?, ?)RETURNING id")) {
-            generalRequestInsert(preparedStatement, name, email, message);
-            preparedStatement.execute();
-            ResultSet lastUpdatedId = preparedStatement.getResultSet();
-            if (lastUpdatedId.next()) {
-                return lastUpdatedId.getInt(1);
-            }
+    public static Group save(Group group) {
+        try (PreparedStatement preparedStatement = getInstance().getConnection().prepareStatement
+                ("INSERT INTO groups(class) VALUES (?) RETURNING id")) {
+            settingTheValueForTheRequest(preparedStatement, Collections.singletonList(group.getName()));
+            group.setId(receivingId(preparedStatement));
         } catch (SQLException e) {
             System.err.format("SQL State: %s\n%s", e.getSQLState(), e.getMessage());
         }
-        return -1;
+        return group;
     }
 
-    private static void generalRequestInsert(PreparedStatement preparedStatement, String p1, String p2, String p3) {
-        try {
-            preparedStatement.setString(1, p1);
-            preparedStatement.setString(2, p2);
-            preparedStatement.setString(3, p3);
-            preparedStatement.execute();
-        } catch (SQLException ex) {
-            System.err.format("SQL State: %s\n%s", ex.getSQLState(), ex.getMessage());
-        }
-    }
-
-    public static void recordingFeedbackWithUser(int idU, int idF) {
-        try (PreparedStatement preparedStatement = getInstance().getConnection().prepareStatement("INSERT INTO feedbackusers(id_user, id_feedback) VALUES (?, ?)")) {
-            preparedStatement.setInt(1, idU);
-            preparedStatement.setInt(2, idF);
+    public static User_Group save(User_Group user_group) {
+        try (PreparedStatement preparedStatement = getInstance().getConnection().prepareStatement
+                ("INSERT INTO user_group(user_id, group_id) VALUES (?, ?)")) {
+            preparedStatement.setLong(1, user_group.getUser_id());
+            preparedStatement.setLong(2, user_group.getGroup_id());
             preparedStatement.executeUpdate();
         } catch (SQLException e) {
             System.err.format("SQL State: %s\n%s", e.getSQLState(), e.getMessage());
         }
+        return user_group;
     }
 
-    public static void writeNewGroup(String group) {
+    public static Optional<Group> findByName(String group) {
         try (PreparedStatement preparedStatement = getInstance().getConnection().prepareStatement
-                ("INSERT INTO groups(class) VALUES (?)")) {
-            preparedStatement.setString(1, group);
-            preparedStatement.executeUpdate();
-        } catch (SQLException e) {
-            System.err.format("SQL State: %s\n%s", e.getSQLState(), e.getMessage());
-        }
-    }
-
-    public static void recordGroupsForUsers(int idUser, String group) {
-        int idGroup = gettingIdGroup(group);
-        try (PreparedStatement preparedStatement = getInstance().getConnection().prepareStatement
-                ("INSERT INTO together(id_user, id_group) VALUES (?, ?)")) {
-            preparedStatement.setInt(1, idUser);
-            preparedStatement.setInt(2, idGroup);
-            preparedStatement.executeUpdate();
-        } catch (SQLException e) {
-            System.err.format("SQL State: %s\n%s", e.getSQLState(), e.getMessage());
-        }
-    }
-
-    private static int gettingIdGroup(String group) {
-        try (PreparedStatement preparedStatement = getInstance().getConnection().prepareStatement
-                ("SELECT id from groups where class = ?")) {
+                ("SELECT id, class from groups where class = ?")) {
             preparedStatement.setString(1, group);
             ResultSet resultSet = preparedStatement.executeQuery();
             if (resultSet.next()) {
-                return resultSet.getInt("id");
+                return Optional.ofNullable(Group.builder()
+                        .id(resultSet.getLong("id"))
+                        .name(resultSet.getString("class"))
+                        .build());
             }
         } catch (SQLException e) {
             System.err.format("SQL State: %s\n%s", e.getSQLState(), e.getMessage());
         }
-        return -1;
+        return Optional.empty();
     }
 
-    public static void formFillingRecord(int id_user) {
+    public static void updateInformation(long idUser, long idInfo) {
         try (PreparedStatement preparedStatement = getInstance().getConnection().prepareStatement
-                ("INSERT INTO profilefilling(field, id_users) VALUES (?, ?)")) {
-            preparedStatement.setBoolean(1, true);
-            preparedStatement.setInt(2, id_user);
+                ("UPDATE users set information_id = ? where id = ?")) {
+            preparedStatement.setLong(1, idInfo);
+            preparedStatement.setLong(2, idUser);
             preparedStatement.executeUpdate();
         } catch (SQLException e) {
             System.err.format("SQL State: %s\n%s", e.getSQLState(), e.getMessage());
         }
     }
 
-    public static boolean verificationFormFilling(int id_user) {
+    public static Optional<Information> findById(long id) {
         try (PreparedStatement preparedStatement = getInstance().getConnection().prepareStatement
-                ("SELECT field from profilefilling where id_users = ?")) {
-            preparedStatement.setInt(1, id_user);
-            ResultSet resultSet = preparedStatement.executeQuery();
-            if (resultSet.next()) {
-                return resultSet.getBoolean("field");
-            }
-        } catch (SQLException e) {
-            System.err.format("SQL State: %s\n%s", e.getSQLState(), e.getMessage());
-        }
-        return false;
-    }
-
-    public static void recordInfoForUsers(int idUser, int idInfo) {
-        try (PreparedStatement preparedStatement = getInstance().getConnection().prepareStatement
-                ("INSERT INTO together2(id_user, id_info) VALUES (?, ?)")) {
-            preparedStatement.setInt(1, idUser);
-            preparedStatement.setInt(2, idInfo);
-            preparedStatement.executeUpdate();
-        } catch (SQLException e) {
-            System.err.format("SQL State: %s\n%s", e.getSQLState(), e.getMessage());
-        }
-    }
-
-    public static String gettingANickname(int id_user) {
-        try (PreparedStatement preparedStatement = getInstance().getConnection().prepareStatement
-                ("SELECT nickname from users where id = ?")) {
-            preparedStatement.setInt(1, id_user);
-            ResultSet resultSet = preparedStatement.executeQuery();
-            if (resultSet.next()) {
-                return resultSet.getString("nickname");
-            }
-        } catch (SQLException e) {
-            System.err.format("SQL State: %s\n%s", e.getSQLState(), e.getMessage());
-        }
-        return null;
-    }
-
-    public static List<String> receivingAdditionalInformationAboutTheUser(int id_user) {
-        try (PreparedStatement preparedStatement = getInstance().getConnection().prepareStatement
-                ("SELECT name, surname, patronymic, phone, dateofbirth, gender, country from informationaboutuser where id = ?")) {
-            preparedStatement.setInt(1, id_user);
+                ("SELECT id, name, surname, patronymic, phone, dateofbirth, gender, country from information where id = ?")) {
+            preparedStatement.setLong(1, id);
             ResultSet resultSet = preparedStatement.executeQuery();
             while (resultSet.next()) {
-                String name = resultSet.getString("name");
-                String surname = resultSet.getString("surname");
-                String patronymic = resultSet.getString("patronymic");
-                String phone = resultSet.getString("phone");
-                String dataOfbirth = resultSet.getString("dateofbirth");
-                String gender = resultSet.getString("gender");
-                String country = resultSet.getString("country");
-                List<String> info = new ArrayList<>();
-                info.add(name);
-                info.add(surname);
-                info.add(patronymic);
-                info.add(phone);
-                info.add(dataOfbirth);
-                info.add(gender);
-                info.add(country);
-                return info;
+                return Optional.ofNullable(Information.builder()
+                        .id(resultSet.getLong("id"))
+                        .name(resultSet.getString("name"))
+                        .surname(resultSet.getString("surname"))
+                        .patronymic(resultSet.getString("patronymic"))
+                        .phone(resultSet.getString("phone"))
+                        .dateOfBirth(resultSet.getString("dateofbirth"))
+                        .gender(resultSet.getString("gender"))
+                        .country(resultSet.getString("country"))
+                        .build());
             }
         } catch (SQLException e) {
             System.err.format("SQL State: %s\n%s", e.getSQLState(), e.getMessage());
         }
-        return null;
+        return Optional.empty();
     }
 
-    public static int receivingAdditionalWithId(int idU) {
-        try (PreparedStatement preparedStatement = getInstance().getConnection().prepareStatement
-                ("SELECT id_info  from together2 where id_user = ?")) {
-            preparedStatement.setInt(1, idU);
-            ResultSet resultSet = preparedStatement.executeQuery();
-            while (resultSet.next()) {
-                return resultSet.getInt("id_info");
-            }
-        } catch (SQLException e) {
-            System.err.format("SQL State: %s\n%s", e.getSQLState(), e.getMessage());
+    private static void settingTheValueForTheRequest(PreparedStatement preparedStatement, List<String> values) throws SQLException {
+        for (int i = 1; i <= values.size(); i++) preparedStatement.setString(i, values.get(i-1));
+        preparedStatement.execute();
+    }
+
+    private static long receivingId(PreparedStatement preparedStatement) throws SQLException {
+        ResultSet lastUpdatedId = preparedStatement.getResultSet();
+        if (lastUpdatedId.next()) {
+            return lastUpdatedId.getInt(1);
         }
-        return -1;
+        return 0;
     }
 }

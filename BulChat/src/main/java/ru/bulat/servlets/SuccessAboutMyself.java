@@ -1,6 +1,6 @@
 package ru.bulat.servlets;
 
-import ru.bulat.session.Namenator;
+import ru.bulat.utils.Session;
 
 import javax.servlet.ServletException;
 import javax.servlet.annotation.WebServlet;
@@ -14,7 +14,7 @@ public class SuccessAboutMyself extends HttpServlet {
     @Override
     protected void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
         request.getServletContext().getRequestDispatcher("/jsp/successAboutMyself.jsp").forward(request,response);
-        Namenator.getName(request);
+        Session.getName(request);
     }
 
     @Override
